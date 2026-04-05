@@ -22,7 +22,10 @@ const app = express();
 app.use(express.json());
 
 // Enable CORS
-app.use(cors());
+app.use(cors({
+    origin: ['https://micro-feedback.netlify.app', 'http://localhost:5173', 'http://localhost:3000'],
+    credentials: true
+}));
 
 // Set static folder for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

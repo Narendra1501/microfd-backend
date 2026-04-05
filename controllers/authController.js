@@ -186,20 +186,10 @@ export const register = async (req, res) => {
 // @access  Public
 export const login = async (req, res) => {
     try {
-        const { email, password, otpToken } = req.body;
+        const { email, password } = req.body;
 
-        if (!email || !password || !otpToken) {
-            return res.status(400).json({ success: false, message: 'Please provide email, password and verify OTP' });
-        }
-
-        // Verify OTP token
-        try {
-            const decoded = jwt.verify(otpToken, process.env.JWT_SECRET);
-            if (decoded.email !== email || decoded.type !== 'login' || !decoded.verified) {
-                return res.status(401).json({ success: false, message: 'Invalid OTP session. Please verify email again.' });
-            }
-        } catch (err) {
-            return res.status(401).json({ success: false, message: 'OTP session expired. Please verify email again.' });
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Please provide email and password' });
         }
 
         const user = await User.findOne({ email }).select('+password');

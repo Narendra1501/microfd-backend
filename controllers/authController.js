@@ -1,5 +1,107 @@
 import User from '../models/User.js';
+import Otp from '../models/Otp.js';
 import jwt from 'jsonwebtoken';
+import { sendOtpEmail } from '../utils/mailer.js';
+
+// @desc    Generate and send OTP
+// @route   POST /api/auth/send-otp
+// @access  Public
+export const sendOtp = async (req, res) => {
+    try {
+        const { email, type } = req.body;
+
+        if (!email || !type) {
+            return res.status(400).json({ success: false, message: 'Please provide email and type' });
+        }
+
+        // Check if user exists
+        const user = await User.findOne({ email });
+        if (!user) {
+            // To prevent email enumeration, we return success even if user not found for password reset
+            return res.status(200).json({ success: true, message: 'If the email exists, an OTP has been sent.' });
+        }
+
+        if (user.isDisabled) {
+            return res.status(403).json({ success: false, message: 'Your account has been disabled. Contact faculty.' });
+        }
+
+        // Check cooldown (prevent generating new OTP too frequently)
+        const recentOtp = await Otp.findOne({ email, type }).sort({ createdAt: -1 });
+        if (recentOtp) {
+            const timeDiff = (Date.now() - new Date(recentOtp.createdAt).getTime()) / 1000;
+            if (timeDiff < 30) {
+                return res.status(429).json({ success: false, message: 'Please wait 30 seconds before requesting another OTP.' });
+            }
+        }
+
+        // Generate 6-digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Save OTP to DB
+        await Otp.create({
+            email,
+            otp: otpCode,
+            type
+        });
+
+        // Send Email
+        await sendOtpEmail(email, otpCode);
+
+        res.status(200).json({ success: true, message: 'OTP sent to your email.' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// @desc    Verify OTP
+// @route   POST /api/auth/verify-otp
+// @access  Public
+export const verifyOtp = async (req, res) => {
+    try {
+        const { email, otp, type } = req.body;
+
+        if (!email || !otp || !type) {
+            return res.status(400).json({ success: false, message: 'Please provide email, otp, and type' });
+        }
+
+        // Find the most recent OTP record for this email and type
+        const otpRecord = await Otp.findOne({ email, type }).sort({ createdAt: -1 });
+
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, message: 'OTP is invalid or has expired' });
+        }
+
+        // Check max attempts
+        if (otpRecord.attempts >= 3) {
+            await Otp.deleteMany({ email, type }); // clear them out
+            return res.status(400).json({ success: false, message: 'Maximum attempts reached. Please request a new OTP.' });
+        }
+
+        // Verify OTP
+        const isMatch = await otpRecord.matchOtp(otp);
+
+        if (!isMatch) {
+            otpRecord.attempts += 1;
+            await otpRecord.save();
+            return res.status(400).json({ success: false, message: 'Invalid OTP' });
+        }
+
+        // OTP is correct. Issue short-lived otpToken (e.g. 10 mins)
+        await Otp.deleteMany({ email, type }); // Remove verified OTPs
+
+        const otpToken = jwt.sign({ email, type, verified: true }, process.env.JWT_SECRET, {
+            expiresIn: '10m'
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'OTP verified successfully',
+            otpToken
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
 
 // Helper to generate token and send response
 const sendTokenResponse = (user, statusCode, res) => {
@@ -84,10 +186,20 @@ export const register = async (req, res) => {
 // @access  Public
 export const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, otpToken } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'Please provide an email and password' });
+        if (!email || !password || !otpToken) {
+            return res.status(400).json({ success: false, message: 'Please provide email, password and verify OTP' });
+        }
+
+        // Verify OTP token
+        try {
+            const decoded = jwt.verify(otpToken, process.env.JWT_SECRET);
+            if (decoded.email !== email || decoded.type !== 'login' || !decoded.verified) {
+                return res.status(401).json({ success: false, message: 'Invalid OTP session. Please verify email again.' });
+            }
+        } catch (err) {
+            return res.status(401).json({ success: false, message: 'OTP session expired. Please verify email again.' });
         }
 
         const user = await User.findOne({ email }).select('+password');
@@ -157,10 +269,20 @@ export const forgotPassword = async (req, res) => {
 // @access  Public
 export const resetPassword = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, otpToken } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'Please provide email and new password' });
+        if (!email || !password || !otpToken) {
+            return res.status(400).json({ success: false, message: 'Please provide email, new password, and verify OTP' });
+        }
+
+        // Verify OTP token
+        try {
+            const decoded = jwt.verify(otpToken, process.env.JWT_SECRET);
+            if (decoded.email !== email || decoded.type !== 'reset' || !decoded.verified) {
+                return res.status(401).json({ success: false, message: 'Invalid OTP session. Please verify email again.' });
+            }
+        } catch (err) {
+            return res.status(401).json({ success: false, message: 'OTP session expired. Please verify email again.' });
         }
 
         const user = await User.findOne({ email });

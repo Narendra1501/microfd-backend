@@ -33,3 +33,13 @@ export const postChat = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
+
+export const clearChats = async (req, res) => {
+    try {
+        await Chat.deleteMany({});
+        res.status(200).json({ success: true, message: 'All chats cleared successfully.' });
+    } catch (error) {
+        console.error('Error clearing chats:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};

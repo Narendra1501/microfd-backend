@@ -70,7 +70,7 @@ export const startCronJobs = () => {
     cron.schedule('0 9 * * 6', async () => {
         console.log('Running Saturday morning email cron job...');
         try {
-            await sendWeeklyUpdateEmail('2401109085@ptuniv.edu.in');
+            await sendWeeklyUpdateEmail('jayanthi@ptuniv.edu.in');
         } catch (error) {
             console.error('Error in Saturday morning cron job:', error);
         }

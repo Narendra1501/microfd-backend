@@ -79,9 +79,9 @@ export const sendWeeklyUpdateEmail = async (toEmail) => {
             to: toEmail,
             subject: 'Weekly student feedbacks has been updated',
             html: `
-                <p>Hello,</p>
+                <p>Good Morning Ma'am,</p>
                 <p>Weekly student feedbacks has been updated.</p>
-                <p>You can view the details by visiting our website: <a href="https://microfeedback/">https://microfeedback/</a></p>
+                <p>You can view the details by visiting our website: <a href="https://micro-feedback.netlify.app">https://micro-feedback.netlify.app</a></p>
                 <br>
                 <p>Best regards,<br>Micro Feedback System</p>
             `,

@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://narendraramesh15_db_user:@narendra15R@1@cluster0.zieajvb.mongodb.net/?appName=Cluster0', {
+        const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://naren_ramesh:2pTCb8bOW4nKqAms@cluster0.cfoeua7.mongodb.net/?appName=Cluster0', {
             serverApi: {
                 version: '1',
                 strict: true,

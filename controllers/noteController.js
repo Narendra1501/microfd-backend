@@ -1,5 +1,5 @@
 import multer from 'multer';
-import supabase from '../config/supabase.js';
+import { createNote, listNotes } from '../utils/dbStore.js';
 
 // Multer Storage Configuration
 const storage = multer.diskStorage({
@@ -52,23 +52,15 @@ export const uploadNote = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please specify the unit number' });
         }
 
-        const { data: note, error } = await supabase
-            .from('course_notes')
-            .insert([{
-                unit_number: unitNumber,
-                unitNumber: unitNumber,
-                file_name: req.file.originalname,
-                fileName: req.file.originalname,
-                file_path: `/uploads/notes/${req.file.filename}`,
-                filePath: `/uploads/notes/${req.file.filename}`,
-                created_at: new Date().toISOString()
-            }])
-            .select()
-            .single();
-
-        if (error) {
-            return res.status(400).json({ success: false, message: error.message });
-        }
+        const note = createNote({
+            unit_number: unitNumber,
+            unitNumber: unitNumber,
+            file_name: req.file.originalname,
+            fileName: req.file.originalname,
+            file_path: `/uploads/notes/${req.file.filename}`,
+            filePath: `/uploads/notes/${req.file.filename}`,
+            created_at: new Date().toISOString()
+        });
 
         res.status(201).json({ success: true, data: formatNote(note) });
     } catch (err) {
@@ -81,15 +73,7 @@ export const uploadNote = async (req, res) => {
 // @access  Public (Student/Faculty)
 export const getNotes = async (req, res) => {
     try {
-        const { data: notes, error } = await supabase
-            .from('course_notes')
-            .select('*')
-            .order('unit_number', { ascending: true });
-
-        if (error) {
-            return res.status(400).json({ success: false, message: error.message });
-        }
-
+        const notes = listNotes().sort((a, b) => String(a.unitNumber || a.unit_number || '').localeCompare(String(b.unitNumber || b.unit_number || '')));
         const formatted = (notes || []).map(formatNote);
         res.status(200).json({ success: true, data: formatted });
     } catch (err) {

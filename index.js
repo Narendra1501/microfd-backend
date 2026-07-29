@@ -14,7 +14,7 @@ import notifications from './routes/notificationRoutes.js';
 import dev from './routes/devRoutes.js';
 
 // Config & cron
-import './config/supabase.js';
+import { seedDefaultUsers } from './utils/dbStore.js';
 import { startCronJobs } from './cron/weeklyEmail.js';
 
 // Load env vars FIRST (before any process.env usage)
@@ -57,7 +57,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
+    await seedDefaultUsers();
     startCronJobs();
 });

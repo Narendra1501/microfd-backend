@@ -1,6 +1,6 @@
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 import cron from 'node-cron';
-import supabase from '../config/supabase.js';
+import { listFeedbacks, listUsers } from '../utils/dbStore.js';
 import { sendWeeklyAnalysisEmail, sendWeeklyUpdateEmail } from '../utils/mailer.js';
 
 // Helper to extract ratings from a feedback row
@@ -30,16 +30,7 @@ export const startCronJobs = () => {
 
         try {
 
-            // Change "feedback" to "feedbacks" only if your table is named feedbacks
-            const { data: allFeedbacks, error } = await supabase
-                .from('feedback')
-                .select('*')
-                .order('created_at', { ascending: true });
-
-            if (error) {
-                console.error(error);
-                return;
-            }
+            const allFeedbacks = listFeedbacks();
 
             if (!allFeedbacks || allFeedbacks.length === 0) {
                 console.log('No feedback found.');
@@ -130,18 +121,9 @@ export const startCronJobs = () => {
 
             };
 
-            const { data: facultyMembers, error: facultyError } = await supabase
-                .from('users')
-                .select('email')
-                .eq('role', 'faculty');
-
-            if (facultyError) {
-                console.error(facultyError);
-                return;
-            }
-
+            const facultyMembers = listUsers().filter((entry) => entry.role === 'faculty');
             const facultyEmails =
-                facultyMembers?.map(f => f.email).filter(Boolean) || [];
+                facultyMembers?.map((f) => f.email).filter(Boolean) || [];
 
             if (facultyEmails.length > 0) {
                 await sendWeeklyAnalysisEmail(

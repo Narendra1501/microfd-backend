@@ -1,14 +1,10 @@
 import jwt from 'jsonwebtoken';
-import supabase from '../config/supabase.js';
+import { getUserById } from '../utils/dbStore.js';
 
-// Protect routes
 export const protect = async (req, res, next) => {
     let token;
 
-    if (
-        req.headers.authorization &&
-        req.headers.authorization.startsWith('Bearer')
-    ) {
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         token = req.headers.authorization.split(' ')[1];
     }
 
@@ -17,20 +13,13 @@ export const protect = async (req, res, next) => {
     }
 
     try {
-        // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = getUserById(decoded.id);
 
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', decoded.id)
-            .single();
-
-        if (error || !user) {
+        if (!user) {
             return res.status(401).json({ success: false, message: 'User not found' });
         }
 
-        // Standardize properties for frontend compatibility
         const userObj = {
             ...user,
             _id: user.id,
@@ -40,7 +29,6 @@ export const protect = async (req, res, next) => {
 
         req.user = userObj;
 
-        // Check if student is disabled
         if (req.user.isDisabled) {
             return res.status(403).json({ success: false, message: 'Your account has been disabled. Contact faculty.' });
         }
@@ -51,7 +39,6 @@ export const protect = async (req, res, next) => {
     }
 };
 
-// Grant access to specific roles
 export const authorize = (...roles) => {
     return (req, res, next) => {
         if (!roles.includes(req.user.role)) {

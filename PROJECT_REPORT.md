@@ -24,8 +24,8 @@ We used the **MERN** stack (with a small change: we use Vite instead of regular 
     *   **Recharts:** A library used to draw beautiful graphs and charts on the teacher's dashboard.
 *   **Backend (Server & Logic):**
     *   **Node.js & Express.js:** The core engine that handles our API requests and runs our server logic.
-*   **Database:**
-    *   **MongoDB (with Mongoose):** A NoSQL database that stores all our data (Users, Feedback, Notes, Chats) in flexible formats.
+*   **Data Layer:**
+    *   **In-memory store:** The runtime uses a local in-memory store so the application can start and run without any database integration.
 *   **Important Tools:**
     *   **JWT (JSON Web Token) & bcrypt:** Keeps user logins secure by encrypting passwords and managing sessions.
     *   **Nodemailer:** Used to send automated emails (like OTPs for login).
@@ -38,7 +38,7 @@ We used the **MERN** stack (with a small change: we use Vite instead of regular 
 The project is divided into two main parts that talk to each other:
 
 *   **Frontend (The Face):** Everything the user sees and clicks on in the browser. It doesn't talk to the database directly. Instead, when you click a button (like "Submit Feedback"), it sends a request over the internet to the backend.
-*   **Backend (The Brain):** An invisible server that receives requests from the frontend. It checks if the user is authorized, saves or gets data from the MongoDB database, and sends a final response (like "Success" or "Error") back to the frontend.
+*   **Backend (The Brain):** An invisible server that receives requests from the frontend. It checks if the user is authorized, stores or retrieves data from the local in-memory store, and sends a final response (like "Success" or "Error") back to the frontend.
 *   **How they communicate:** They talk to each other using **REST APIs** (a standard way of sending data) in JSON format. The frontend uses a tool called `Axios` to make these API calls.
 
 ---
@@ -84,8 +84,8 @@ Want to run this project on your laptop? Follow these simple steps:
     *   Navigate to frontend: `cd frontend`
     *   Run: `npm install`
 4.  **Setup Environment Variables:**
-    *   In the `backend` folder, create a file named `.env`.
-    *   Add your local `MONGO_URI`, `JWT_SECRET`, and email details (`EMAIL_USER`, `EMAIL_PASS`).
+    *   In the project root, create a file named `.env`.
+    *   Add your local `JWT_SECRET` and email details (`EMAIL_USER`, `EMAIL_PASS`).
 5.  **Start the Backend:** Inside the backend terminal, run `npm run dev`. (It usually runs on port 5000).
 6.  **Start the Frontend:** Inside the frontend terminal, run `npm run dev`. It will give you a local link (like `http://localhost:5173`) to open in your browser.
 
@@ -99,7 +99,7 @@ When managing data, we follow a standard flow. Let's use **Submitting Feedback**
 2.  **Frontend Service:** React calls an API function in `src/services/`.
 3.  **Backend Route:** The request hits `routes/feedbackRoutes.js` in the backend.
 4.  **Backend Controller:** The route sends it to `controllers/feedbackController.js`, which checks the data.
-5.  **Database Pattern:** The controller uses `models/Feedback.js` to save the answer permanently into MongoDB.
+5.  **Database Pattern:** The controller stores feedback in the local in-memory store for the current runtime.
 6.  **Response:** The backend sends a "success" message back, and React shows a "Thank You" popup to the user!
 
 ---

@@ -1,11 +1,30 @@
-import User from '../models/User.js';
-import Otp from '../models/Otp.js';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { comparePassword, createOtp, createUser, deleteOtps, getLatestOtp, getUserByEmail, getUserById, listUsers, updateOtp, updateUser } from '../utils/dbStore.js';
 import { sendOtpEmail } from '../utils/mailer.js';
 
-// @desc    Generate and send OTP
-// @route   POST /api/auth/send-otp
-// @access  Public
+const sendTokenResponse = (user, statusCode, res) => {
+    const userId = user.id || user._id;
+    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    });
+
+    const regNum = user.registerNumber ?? user.register_number;
+
+    res.status(statusCode).json({
+        success: true,
+        token,
+        user: {
+            id: userId,
+            _id: userId,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            registerNumber: regNum
+        }
+    });
+};
+
 export const sendOtp = async (req, res) => {
     try {
         const { email, type } = req.body;
@@ -14,48 +33,43 @@ export const sendOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide email and type' });
         }
 
-        // Check if user exists
-        const user = await User.findOne({ email });
+        const user = getUserByEmail(email);
         if (!user) {
-            // To prevent email enumeration, we return success even if user not found for password reset
             return res.status(200).json({ success: true, message: 'If the email exists, an OTP has been sent.' });
         }
 
-        if (user.isDisabled) {
+        const isDisabled = user.isDisabled ?? user.is_disabled ?? false;
+        if (isDisabled) {
             return res.status(403).json({ success: false, message: 'Your account has been disabled. Contact faculty.' });
         }
 
-        // Check cooldown (prevent generating new OTP too frequently)
-        const recentOtp = await Otp.findOne({ email, type }).sort({ createdAt: -1 });
+        const recentOtp = getLatestOtp(email, type);
         if (recentOtp) {
-            const timeDiff = (Date.now() - new Date(recentOtp.createdAt).getTime()) / 1000;
+            const createdAtTime = new Date(recentOtp.created_at || recentOtp.createdAt).getTime();
+            const timeDiff = (Date.now() - createdAtTime) / 1000;
             if (timeDiff < 30) {
                 return res.status(429).json({ success: false, message: 'Please wait 30 seconds before requesting another OTP.' });
             }
         }
 
-        // Generate 6-digit OTP
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedOtp = await bcrypt.hash(otpCode, 10);
 
-        // Save OTP to DB
-        await Otp.create({
+        createOtp({
             email,
-            otp: otpCode,
-            type
+            otp: hashedOtp,
+            type,
+            attempts: 0,
+            created_at: new Date().toISOString()
         });
 
-        // Send Email
         await sendOtpEmail(email, otpCode);
-
         res.status(200).json({ success: true, message: 'OTP sent to your email.' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 };
 
-// @desc    Verify OTP
-// @route   POST /api/auth/verify-otp
-// @access  Public
 export const verifyOtp = async (req, res) => {
     try {
         const { email, otp, type } = req.body;
@@ -64,126 +78,84 @@ export const verifyOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide email, otp, and type' });
         }
 
-        // Find the most recent OTP record for this email and type
-        const otpRecord = await Otp.findOne({ email, type }).sort({ createdAt: -1 });
-
+        const otpRecord = getLatestOtp(email, type);
         if (!otpRecord) {
             return res.status(400).json({ success: false, message: 'OTP is invalid or has expired' });
         }
 
-        // Check max attempts
-        if (otpRecord.attempts >= 3) {
-            await Otp.deleteMany({ email, type }); // clear them out
+        if ((otpRecord.attempts || 0) >= 3) {
+            deleteOtps(email, type);
             return res.status(400).json({ success: false, message: 'Maximum attempts reached. Please request a new OTP.' });
         }
 
-        // Verify OTP
-        const isMatch = await otpRecord.matchOtp(otp);
+        let isMatch = false;
+        if (otpRecord.otp.startsWith('$2a$') || otpRecord.otp.startsWith('$2b$')) {
+            isMatch = await bcrypt.compare(otp, otpRecord.otp);
+        } else {
+            isMatch = (otpRecord.otp === otp);
+        }
 
         if (!isMatch) {
-            otpRecord.attempts += 1;
-            await otpRecord.save();
+            const newAttempts = (otpRecord.attempts || 0) + 1;
+            updateOtp(otpRecord.id, { attempts: newAttempts });
             return res.status(400).json({ success: false, message: 'Invalid OTP' });
         }
 
-        // OTP is correct. Issue short-lived otpToken (e.g. 10 mins)
-        await Otp.deleteMany({ email, type }); // Remove verified OTPs
+        deleteOtps(email, type);
 
         const otpToken = jwt.sign({ email, type, verified: true }, process.env.JWT_SECRET, {
             expiresIn: '10m'
         });
 
-        res.status(200).json({
-            success: true,
-            message: 'OTP verified successfully',
-            otpToken
-        });
+        res.status(200).json({ success: true, message: 'OTP verified successfully', otpToken });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 };
 
-// Helper to generate token and send response
-const sendTokenResponse = (user, statusCode, res) => {
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN
-    });
-
-    res.status(statusCode).json({
-        success: true,
-        token,
-        user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            registerNumber: user.registerNumber
-        }
-    });
-};
-
-// @desc    Register user
-// @route   POST /api/auth/register
-// @access  Public
 export const register = async (req, res) => {
     try {
-        const { name, registerNumber, email, password, role } = req.body;
+        const { name, registerNumber, email, password } = req.body;
 
-        // Enforce faculty role rule
         let finalRole = 'student';
-        if (email.toLowerCase() === 'jayanthi@ptuniv.edu.in') {
+        if (String(email).toLowerCase() === 'jayanthi@ptuniv.edu.in') {
             finalRole = 'faculty';
         }
 
-        // Validate student email format: 2401109073@ptuniv.edu.in
         const studentEmailRegex = /^[0-9]{10}@ptuniv\.edu\.in$/;
-
         if (finalRole !== 'faculty') {
             if (!studentEmailRegex.test(email)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Only college domain emails are allowed.'
-                });
+                return res.status(400).json({ success: false, message: 'Only college domain emails are allowed.' });
             }
             if (!registerNumber) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Students must provide a register number.'
-                });
+                return res.status(400).json({ success: false, message: 'Students must provide a register number.' });
             }
         }
 
-        // Check if user already exists
-        const emailExists = await User.findOne({ email });
-        if (emailExists) {
+        if (getUserByEmail(email)) {
             return res.status(400).json({ success: false, message: 'Email is already registered' });
         }
 
-        if (registerNumber) {
-            const regExists = await User.findOne({ registerNumber });
-            if (regExists) {
-                return res.status(400).json({ success: false, message: 'Register number is already associated with an account' });
-            }
+        if (registerNumber && listUsers().some((user) => user.registerNumber === registerNumber || user.register_number === registerNumber)) {
+            return res.status(400).json({ success: false, message: 'Register number is already associated with an account' });
         }
 
-        // Create user
-        const user = await User.create({
+        const newUser = await createUser({
             name,
             registerNumber,
             email,
             password,
-            role: finalRole
+            role: finalRole,
+            is_disabled: false,
+            isDisabled: false
         });
 
-        sendTokenResponse(user, 201, res);
+        sendTokenResponse(newUser, 201, res);
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -192,18 +164,17 @@ export const login = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide email and password' });
         }
 
-        const user = await User.findOne({ email }).select('+password');
-
+        const user = getUserByEmail(email);
         if (!user) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        if (user.isDisabled) {
+        const isDisabled = user.isDisabled ?? user.is_disabled ?? false;
+        if (isDisabled) {
             return res.status(403).json({ success: false, message: 'Your account has been disabled. Contact faculty.' });
         }
 
-        const isMatch = await user.matchPassword(password);
-
+        const isMatch = await comparePassword(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
@@ -214,23 +185,26 @@ export const login = async (req, res) => {
     }
 };
 
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
 export const getMe = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        res.status(200).json({
-            success: true,
-            data: user
-        });
+        const user = getUserById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const userObj = {
+            ...user,
+            _id: user.id,
+            registerNumber: user.registerNumber ?? user.register_number,
+            isDisabled: user.isDisabled ?? user.is_disabled ?? false
+        };
+
+        res.status(200).json({ success: true, data: userObj });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }
 };
-// @desc    Check if email exists for password recovery
-// @route   POST /api/auth/forgot-password
-// @access  Public
+
 export const forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
@@ -239,24 +213,17 @@ export const forgotPassword = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide an email' });
         }
 
-        const user = await User.findOne({ email });
-
+        const user = getUserByEmail(email);
         if (!user) {
             return res.status(404).json({ success: false, message: 'Email not found' });
         }
 
-        res.status(200).json({
-            success: true,
-            message: 'Email verified'
-        });
+        res.status(200).json({ success: true, message: 'Email verified' });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }
 };
 
-// @desc    Reset password
-// @route   POST /api/auth/reset-password
-// @access  Public
 export const resetPassword = async (req, res) => {
     try {
         const { email, password, otpToken } = req.body;
@@ -265,7 +232,6 @@ export const resetPassword = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide email, new password, and verify OTP' });
         }
 
-        // Verify OTP token
         try {
             const decoded = jwt.verify(otpToken, process.env.JWT_SECRET);
             if (decoded.email !== email || decoded.type !== 'reset' || !decoded.verified) {
@@ -275,20 +241,15 @@ export const resetPassword = async (req, res) => {
             return res.status(401).json({ success: false, message: 'OTP session expired. Please verify email again.' });
         }
 
-        const user = await User.findOne({ email });
-
+        const user = getUserByEmail(email);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        // Update password (hashing is handled by User.js pre('save') hook)
-        user.password = password;
-        await user.save();
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updateUser(user.id, { password: hashedPassword });
 
-        res.status(200).json({
-            success: true,
-            message: 'Password reset successfully'
-        });
+        res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }

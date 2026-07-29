@@ -1,0 +1,10 @@
+file:///E:/MICRO%20FEEDBACK/controllers/noteController.js:2
+<<<<<<< HEAD:controllers/noteController.js
+^^
+
+SyntaxError: Unexpected token '<<'
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:169:18)
+    at callTranslator (node:internal/modules/esm/loader:272:14)
+    at ModuleLoader.moduleProvider (node:internal/modules/esm/loader:278:30)
+
+Node.js v20.15.0

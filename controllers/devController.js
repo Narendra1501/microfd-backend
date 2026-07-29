@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
-import supabase from '../config/supabase.js';
+import { listFeedbacks, listUsers, updateUser } from '../utils/dbStore.js';
 import { sendWeeklyAnalysisEmail } from '../utils/mailer.js';
 
 // Helper to extract ratings from a feedback row
@@ -32,23 +32,14 @@ export const resetFacultyPasswordManual = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide email and newPassword' });
         }
 
-        const { data: user } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .maybeSingle();
-
+        const user = listUsers().find((entry) => entry.email === email);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-        await supabase
-            .from('users')
-            .update({ password: hashedPassword })
-            .eq('email', email);
+        updateUser(user.id, { password: hashedPassword });
 
         res.status(200).json({
             success: true,
@@ -61,10 +52,7 @@ export const resetFacultyPasswordManual = async (req, res) => {
 
 export const testWeeklyEmail = async (req, res) => {
     try {
-        const { data: allFeedbacks } = await supabase
-            .from('feedbacks')
-            .select('*')
-            .order('date_string', { ascending: true });
+        const allFeedbacks = listFeedbacks().sort((a, b) => (a.dateString || a.date_string || '').localeCompare(b.dateString || b.date_string || ''));
 
         if (!allFeedbacks || !allFeedbacks.length) {
             return res.status(200).json({ success: true, message: 'No feedbacks to process' });
@@ -109,12 +97,8 @@ export const testWeeklyEmail = async (req, res) => {
             teacherReach: latestWeek.ratingsSum.teacherReach / latestWeek.totalSubmissions
         };
 
-        const { data: facultyMembers } = await supabase
-            .from('users')
-            .select('email')
-            .eq('role', 'faculty');
-
-        const facultyEmails = (facultyMembers || []).map(f => f.email).filter(Boolean);
+        const facultyMembers = listUsers().filter((entry) => entry.role === 'faculty');
+        const facultyEmails = (facultyMembers || []).map((f) => f.email).filter(Boolean);
 
         if (facultyEmails.length > 0) {
             await sendWeeklyAnalysisEmail(facultyEmails, latestWeek);

@@ -1,96 +1,246 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
+import nodemailer from "nodemailer";
+
 dotenv.config();
 
+const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+const emailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false, // true for 465, false for other ports
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
     auth: {
-        user: process.env.SMTP_USER || 'narendraramesh15@gmail.com',
-        pass: process.env.SMTP_PASS || 'lefo ygee gyzy kupz'
-    }
+        user: emailUser,
+        pass: emailPass,
+    },
 });
 
+// ===============================
+// Weekly Analysis Email
+// ===============================
 export const sendWeeklyAnalysisEmail = async (facultyEmails, weekData) => {
     try {
         const mailOptions = {
-            from: `"Micro Feedback System" <${process.env.SMTP_USER || 'noreply@microfeedback.com'}>`,
+            from: `"Micro Feedback System" <${emailUser}>`,
             to: facultyEmails,
-            subject: `Weekly Analysis Ready - Week ${weekData.weekNum}`,
+            subject: `📊 Weekly Feedback Analysis - Week ${weekData.weekNum}`,
             html: `
-                <h2>Feedback Analysis for Week ${weekData.weekNum} is Ready!</h2>
-                <p>Hello Faculty,</p>
-                <p>All students have submitted their feedbacks for the completed week. The analysis has been automatically generated.</p>
-                <h3>Week ${weekData.weekNum} Overview</h3>
-                <ul>
-                    <li><strong>Total Submissions:</strong> ${weekData.totalSubmissions}</li>
-                    <li><strong>Overall Satisfaction Score:</strong> ${weekData.summary.overall.toFixed(2)} / 5.0</li>
-                </ul>
-                <p>Please log in to the Teacher Dashboard to view detailed metrics and student comments.</p>
-                <p>Best regards,<br>Micro Feedback System</p>
-            `,
-        };
+                <div style="font-family:Arial,sans-serif;max-width:700px;margin:auto;padding:20px">
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Weekly analysis email sent: %s', info.messageId);
-        return info;
-    } catch (error) {
-        console.error('Error sending email:', error);
-    }
-};
+                    <h2 style="color:#2563eb;">
+                        Weekly Feedback Analysis Ready
+                    </h2>
 
-export const sendOtpEmail = async (toEmail, otp) => {
-    try {
-        const mailOptions = {
-            from: `"Micro Feedback System" <${process.env.SMTP_USER || 'noreply@microfeedback.com'}>`,
-            to: toEmail,
-            subject: 'Your MicroFeedback Authentication OTP',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
-                    <h2 style="color: #1e293b; text-align: center;">Verification Required</h2>
-                    <p style="color: #475569; font-size: 16px;">Hello,</p>
-                    <p style="color: #475569; font-size: 16px;">Please use the following 6-digit OTP to complete your authentication process. This code will expire in 5 minutes.</p>
-                    
-                    <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 25px 0;">
-                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #0f172a;">${otp}</span>
-                    </div>
-                    
-                    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">If you didn't request this code, you can safely ignore this email.</p>
-                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-                    <p style="color: #94a3b8; font-size: 12px; text-align: center;">&copy; ${new Date().getFullYear()} Micro Feedback System. All rights reserved.</p>
+                    <p>Hello Faculty,</p>
+
+                    <p>
+                        The weekly student feedback analysis has been generated successfully.
+                    </p>
+
+                    <table style="border-collapse:collapse;width:100%;margin-top:20px">
+                        <tr>
+                            <td><b>Week</b></td>
+                            <td>${weekData.weekNum}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Total Feedbacks</b></td>
+                            <td>${weekData.totalSubmissions}</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Overall Rating</b></td>
+                            <td>${weekData.summary.overall.toFixed(2)} / 5</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Life Skills</b></td>
+                            <td>${weekData.summary.lifeSkills.toFixed(2)} / 5</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Learning Experience</b></td>
+                            <td>${weekData.summary.learningExperience.toFixed(2)} / 5</td>
+                        </tr>
+
+                        <tr>
+                            <td><b>Teacher Reach</b></td>
+                            <td>${weekData.summary.teacherReach.toFixed(2)} / 5</td>
+                        </tr>
+                    </table>
+
+                    <br>
+
+                    <a
+                        href="${process.env.FRONTEND_URL}"
+                        style="
+                            background:#2563eb;
+                            color:white;
+                            padding:12px 20px;
+                            text-decoration:none;
+                            border-radius:6px;
+                        "
+                    >
+                        Open Teacher Dashboard
+                    </a>
+
+                    <br><br>
+
+                    <p>
+                        Regards,<br>
+                        <b>Micro Feedback System</b>
+                    </p>
+
                 </div>
             `,
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('OTP email sent: %s', info.messageId);
+
+        console.log("Weekly Analysis Email Sent:", info.messageId);
+
         return info;
-    } catch (error) {
-        console.error('Error sending OTP email:', error);
-        throw error;
+    } catch (err) {
+        console.error("Weekly Analysis Email Error:", err);
+        throw err;
     }
 };
 
-export const sendWeeklyUpdateEmail = async (toEmail) => {
+// ===============================
+// OTP Email
+// ===============================
+export const sendOtpEmail = async (toEmail, otp) => {
     try {
         const mailOptions = {
-            from: `"Micro Feedback System" <${process.env.SMTP_USER || 'noreply@microfeedback.com'}>`,
+            from: `"Micro Feedback System" <${emailUser}>`,
             to: toEmail,
-            subject: 'Weekly student feedbacks has been updated',
+            subject: "Your Verification OTP",
             html: `
-                <p>Good Morning Ma'am,</p>
-                <p>Weekly student feedbacks has been updated.</p>
-                <p>You can view the details by visiting our website: <a href="https://micro-feedback.netlify.app">https://micro-feedback.netlify.app</a></p>
-                <br>
-                <p>Best regards,<br>Micro Feedback System</p>
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px">
+
+                    <h2 style="color:#2563eb">
+                        Email Verification
+                    </h2>
+
+                    <p>Your OTP is:</p>
+
+                    <h1
+                        style="
+                            letter-spacing:8px;
+                            text-align:center;
+                            background:#f3f4f6;
+                            padding:20px;
+                            border-radius:10px;
+                        "
+                    >
+                        ${otp}
+                    </h1>
+
+                    <p>
+                        This OTP will expire in <b>5 minutes</b>.
+                    </p>
+
+                    <p>
+                        If you didn't request this OTP, please ignore this email.
+                    </p>
+
+                    <br>
+
+                    <p>
+                        Regards,<br>
+                        <b>Micro Feedback System</b>
+                    </p>
+
+                </div>
             `,
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('Weekly update email sent: %s', info.messageId);
+
+        console.log("OTP Email Sent:", info.messageId);
+
         return info;
-    } catch (error) {
-        console.error('Error sending weekly update email:', error);
+    } catch (err) {
+        console.error("OTP Email Error:", err);
+        throw err;
+    }
+};
+
+// ===============================
+// Weekly Reminder Email
+// ===============================
+export const sendWeeklyUpdateEmail = async (toEmail) => {
+    try {
+        const mailOptions = {
+            from: `"Micro Feedback System" <${emailUser}>`,
+            to: toEmail,
+            subject: "📢 Weekly Student Feedback Updated",
+
+            html: `
+                <div style="font-family:Arial,sans-serif;max-width:650px;margin:auto;padding:20px">
+
+                    <h2 style="color:#2563eb">
+                        Weekly Feedback Available
+                    </h2>
+
+                    <p>
+                        Good Morning Ma'am,
+                    </p>
+
+                    <p>
+                        The weekly student feedback has been submitted successfully.
+                    </p>
+
+                    <p>
+                        Click the button below to login and view the Teacher Dashboard.
+                    </p>
+
+                    <br>
+
+                    <a
+                        href="${process.env.FRONTEND_URL}"
+                        style="
+                            background:#16a34a;
+                            color:white;
+                            padding:12px 22px;
+                            text-decoration:none;
+                            border-radius:6px;
+                            font-weight:bold;
+                        "
+                    >
+                        View Feedback
+                    </a>
+
+                    <br><br>
+
+                    <p>
+                        Or copy this link:
+                    </p>
+
+                    <p>
+                        <a href="${process.env.FRONTEND_URL}">
+                            ${process.env.FRONTEND_URL}
+                        </a>
+                    </p>
+
+                    <hr>
+
+                    <p style="font-size:12px;color:#777">
+                        © ${new Date().getFullYear()} Micro Feedback System
+                    </p>
+
+                </div>
+            `,
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+
+        console.log("Weekly Reminder Email Sent:", info.messageId);
+
+        return info;
+    } catch (err) {
+        console.error("Weekly Reminder Email Error:", err);
+        throw err;
     }
 };

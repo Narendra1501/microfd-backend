@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import supabase from '../config/supabase.js';
 
 // Protect routes
 export const protect = async (req, res, next) => {
@@ -20,11 +20,25 @@ export const protect = async (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        req.user = await User.findById(decoded.id);
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', decoded.id)
+            .single();
 
-        if (!req.user) {
+        if (error || !user) {
             return res.status(401).json({ success: false, message: 'User not found' });
         }
+
+        // Standardize properties for frontend compatibility
+        const userObj = {
+            ...user,
+            _id: user.id,
+            registerNumber: user.registerNumber ?? user.register_number,
+            isDisabled: user.isDisabled ?? user.is_disabled ?? false
+        };
+
+        req.user = userObj;
 
         // Check if student is disabled
         if (req.user.isDisabled) {

@@ -1,17 +1,24 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import connectDB from './config/db.js';
-import { startCronJobs } from './cron/weeklyEmail.js';
-
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Load env vars
-dotenv.config();
+// Routes
+import auth from './routes/authRoutes.js';
+import feedback from './routes/feedbackRoutes.js';
+import admin from './routes/adminRoutes.js';
+import chats from './routes/chatRoutes.js';
+import notes from './routes/noteRoutes.js';
+import notifications from './routes/notificationRoutes.js';
+import dev from './routes/devRoutes.js';
 
-// Connect to database
-connectDB();
+// Config & cron
+import './config/supabase.js';
+import { startCronJobs } from './cron/weeklyEmail.js';
+
+// Load env vars FIRST (before any process.env usage)
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,15 +41,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'API is running' });
 });
-
-// Route files
-import auth from './routes/authRoutes.js';
-import feedback from './routes/feedbackRoutes.js';
-import admin from './routes/adminRoutes.js';
-import chats from './routes/chatRoutes.js';
-import notes from './routes/noteRoutes.js';
-import notifications from './routes/notificationRoutes.js';
-import dev from './routes/devRoutes.js';
 
 // Mount routers
 app.use('/api/auth', auth);

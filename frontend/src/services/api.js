@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const api = axios.create({
-    baseURL: 'https://microfd-backend.onrender.com/api',
-    // baseURL: 'http://127.0.0.1:5000/api',
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+const api = axios.create({
+    baseURL: `${BASE.replace(/\/$/, '')}/api`,
 });
 
 // Request interceptor to attach JWT token
